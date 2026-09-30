@@ -124,7 +124,7 @@ function render() {
   items.forEach((it, k) => {
     const c = document.createElement("div");
     c.className = "panel card";
-    const badge = { wait: ["b-run", "En attente"], run: ["b-run", "Lecture…"], ok: ["b-ok", "✓ Titre détecté"], empty: ["b-warn", "⚠ Aucun texte"] }[it.state];
+    const badge = { wait: ["b-run", "En attente"], run: ["b-run", "Lecture…"], ok: ["b-ok", "✓ Titre détecté"], empty: ["b-warn", it.err ? "⚠ Erreur OCR : " + it.err.slice(0, 70).replace(/</g, "") : "⚠ Aucun texte lu : augmentez la zone"] }[it.state];
     c.innerHTML = `<img src="${it.url}" alt=""><div class="orig"></div>
       <input type="text" aria-label="Nouveau nom"><span class="badge ${badge[0]}">${badge[1]}</span>`;
     c.querySelector(".orig").textContent = it.file.name;
@@ -140,8 +140,12 @@ async function cropTop(file, frac) {
   const bmp = await createImageBitmap(file);
   const h = Math.max(1, Math.round(bmp.height * frac));
   const cv = document.createElement("canvas");
-  cv.width = bmp.width; cv.height = h;
-  cv.getContext("2d").drawImage(bmp, 0, 0, bmp.width, h, 0, 0, bmp.width, h);
+  const k = bmp.width < 1600 ? 1600 / bmp.width : 1;   // agrandit les petites images
+  cv.width = Math.round(bmp.width * k); cv.height = Math.round(h * k);
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.filter = "grayscale(1) contrast(1.4)";
+  ctx.drawImage(bmp, 0, 0, bmp.width, h, 0, 0, cv.width, cv.height);
   return cv;
 }
 
@@ -159,12 +163,12 @@ async function process(all) {
     const frac = $("#part").value / 100;
     for (let n = 0; n < todo.length; n++) {
       const it = todo[n];
-      it.state = "run"; render();
+      it.state = "run"; it.err = ""; render();
       try {
         const { data } = await worker.recognize(await cropTop(it.file, frac));
         const t = clean(data.text);
         it.name = t; it.state = t ? "ok" : "empty";
-      } catch (e) { it.name = ""; it.state = "empty"; }
+      } catch (e) { console.error(e); it.name = ""; it.state = "empty"; it.err = String((e && e.message) || e); }
       fill.style.width = ((n + 1) / todo.length * 100) + "%";
       render();
     }
