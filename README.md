@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # TitleRename
 
 Renomme des images avec le titre lu par OCR (Tesseract + Streamlit).
@@ -10,3 +11,6 @@ Renomme des images avec le titre lu par OCR (Tesseract + Streamlit).
 
 ## Lancer
 `python -m streamlit run app.py`
+=======
+# TITLERENAME
+>>>>>>> f19e0e737c6fe87b86a581a274653bbead8e2a9d
