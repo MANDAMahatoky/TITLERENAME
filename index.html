@@ -61,6 +61,17 @@ button:focus-visible{outline:2px solid #fff;outline-offset:2px}
           <option value="deu">Allemand</option>
         </select>
       </label>
+      <label>Zone lue depuis le haut
+        <select id="part">
+          <option value="auto">Auto (10 à 15 %)</option>
+          <option value="10">10 %</option>
+          <option value="15">15 %</option>
+          <option value="20">20 %</option>
+          <option value="30">30 %</option>
+          <option value="40">40 %</option>
+          <option value="50">50 % (maximum)</option>
+        </select>
+      </label>
       <label>Le titre commence par
         <input type="text" id="prefix" value="AG" size="8" placeholder="vide = tout lire" aria-label="Le titre commence par" title="Format attendu : AGxx-xxxx-NOM, par exemple AGJ8-M2L9-VULCAN">
       </label>
@@ -101,7 +112,7 @@ drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); add(e.dataTransfer.files); };
 $("#file").onchange = e => add(e.target.files);
-$("#lang").onchange = $("#prefix").onchange = () => items.length && process(true);
+$("#lang").onchange = $("#part").onchange = $("#prefix").onchange = () => items.length && process(true);
 
 function add(files) {
   for (const f of files) if (f.type.startsWith("image/"))
@@ -150,12 +161,13 @@ async function cropTop(file, frac) {
 // Lit le titre. Avec un préfixe (ex. "AG"), seul un texte au format AGxx-xxxx-NOM est gardé
 // (4 caractères commençant par le préfixe, puis 4 caractères, puis le nom, séparés par des tirets).
 // Tout le reste (toits, arbres, autres textes) est ignoré.
-async function readTitle(worker, file) {
+async function readTitle(worker, file, mode) {
   const pre = $("#prefix").value.trim();
   const esc = pre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const fmt = pre ? new RegExp(
     `(?<![A-Za-z0-9])${esc}[A-Za-z0-9]{${Math.max(0, 4 - pre.length)}}-[A-Za-z0-9]{4}-[A-Za-z0-9]{2,}`, "i") : null;
-  const fracs = [0.10, 0.12, 0.15];   // zone lue : toujours 10 à 15 % du haut, choisie automatiquement
+  // Auto : essaie 10, 12 et 15 % du haut et garde la lecture la plus fiable. Sinon zone fixe, 50 % au maximum.
+  const fracs = mode === "auto" ? [0.10, 0.12, 0.15] : [Math.min(Number(mode), 50) / 100];
   let best = { score: -1, text: "" };
   for (const f of fracs) {
     const { data } = await worker.recognize(await cropTop(file, f));
@@ -197,11 +209,12 @@ async function process(all) {
   try {
     worker = await Tesseract.createWorker($("#lang").value);
     await worker.setParameters({ tessedit_pageseg_mode: "6" });
+    const mode = $("#part").value;
     for (let n = 0; n < todo.length; n++) {
       const it = todo[n];
       it.state = "run"; it.err = ""; render();
       try {
-        const t = await readTitle(worker, it.file);
+        const t = await readTitle(worker, it.file, mode);
         it.name = t; it.state = t ? "ok" : "empty";
       } catch (e) { console.error(e); it.name = ""; it.state = "empty"; it.err = String((e && e.message) || e); }
       fill.style.width = ((n + 1) / todo.length * 100) + "%";
