@@ -62,8 +62,8 @@ button:focus-visible{outline:2px solid #fff;outline-offset:2px}
         </select>
       </label>
       <label>Zone lue depuis le haut
-        <input type="range" id="part" min="10" max="100" step="5" value="30">
-        <span id="partv">30 %</span>
+        <input type="range" id="part" min="5" max="100" step="5" value="15">
+        <span id="partv">15 %</span>
       </label>
     </div>
     <div id="drop" tabindex="0" role="button" aria-label="Choisir des images">
@@ -149,6 +149,19 @@ async function cropTop(file, frac) {
   return cv;
 }
 
+// Garde la ligne la plus fiable et ignore les mots douteux (bruit venant des toits, arbres, etc.)
+function pickTitle(data) {
+  const lines = (data.lines || []).map(l => {
+    const ws = (l.words || []).filter(w => w.confidence >= 60 && /[\p{L}\p{N}]/u.test(w.text));
+    const txt = ws.map(w => w.text).join(" ");
+    const conf = ws.length ? ws.reduce((s, w) => s + w.confidence, 0) / ws.length : 0;
+    return { txt, conf, len: txt.replace(/\s/g, "").length };
+  }).filter(l => l.len >= 3);
+  if (!lines.length) return clean(data.text);
+  lines.sort((a, b) => b.conf * Math.min(b.len, 20) - a.conf * Math.min(a.len, 20));
+  return clean(lines[0].txt);
+}
+
 async function process(all) {
   if (running) return;
   running = true;
@@ -166,7 +179,7 @@ async function process(all) {
       it.state = "run"; it.err = ""; render();
       try {
         const { data } = await worker.recognize(await cropTop(it.file, frac));
-        const t = clean(data.text);
+        const t = pickTitle(data);
         it.name = t; it.state = t ? "ok" : "empty";
       } catch (e) { console.error(e); it.name = ""; it.state = "empty"; it.err = String((e && e.message) || e); }
       fill.style.width = ((n + 1) / todo.length * 100) + "%";
